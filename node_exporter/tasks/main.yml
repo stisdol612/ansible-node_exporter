@@ -1,4 +1,8 @@
 ---
+- name: update all packages
+  yum:
+   name: yum
+   state: latest
 - name: create node exporter user
   user:
     name: "{{ node_exporter_user }}"
@@ -12,12 +16,6 @@
     state: directory
     owner: "{{ node_exporter_user }}"
     group: "{{ node_exporter_group }}"
-- name: if node exporter exist get version
-  shell: "cat /etc/systemd/system/node_exporter.service | grep Version | sed s/'.*Version '//g"
-  when: __check_node_exporter_present.stat.exists == true
-  changed_when: false
-  register: __get_node_exporter_version
-  
 - name: download and unzip node exporter if not exist
   unarchive:
     src: https://github.com/prometheus/node_exporter/releases/download/v1.4.0/node_exporter-1.4.0.linux-amd64.tar.gz
@@ -32,18 +30,15 @@
     group: "{{ node_exporter_group }}"
     mode: 0755
     remote_src: yes
-  when: __check_node_exporter_present.stat.exists == false or not __get_node_exporter_version.stdout == node_exporter_version
 - name: clean
   file:
     path: /tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/
     state: absent
 - name: install service
   template:
-    src: ~/ansible/roles/node_exporter/templates/node_exporter.service.j2
+    src: node_exporter.service.j2
     dest: /etc/systemd/system/node_exporter.service
     owner: root
-    group: root
-    mode: 0755
   notify: reload_daemon_and_restart_node_exporter
 - meta: flush_handlers
 - name: service always started
@@ -51,3 +46,8 @@
     name: node_exporter
     state: started
     enabled: yes
+- name: Check if node exporter emits metrics
+  uri:
+    url: http://127.0.0.1:9100/metrics
+    method: GET
+    status_code: 200    
